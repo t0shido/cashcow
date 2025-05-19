@@ -25,9 +25,9 @@ from loguru import logger       # Advanced logging functionality with better for
 
 # Local module imports
 from config.settings import Settings                  # Configuration management class that loads from environment
-from api.stellar_api import StellarAPI                # Wrapper for Stellar SDK to simplify network operations
-from strategies.strategy_factory import StrategyFactory  # Factory pattern class to create trading strategies
-from utils.logger import setup_logger                 # Custom logger configuration for file and console output
+from src.api.stellar_api import StellarAPI                # Wrapper for Stellar SDK to simplify network operations
+from src.strategies.strategy_factory import StrategyFactory  # Factory pattern class to create trading strategies
+from src.utils.logger import setup_logger                 # Custom logger configuration for file and console output
 
 # Global variables
 # This flag controls the main loop execution; when set to False, the bot will exit gracefully
