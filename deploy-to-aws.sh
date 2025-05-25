@@ -19,8 +19,7 @@ echo
 read -p "Enter your AWS Lightsail instance IP address: " LIGHTSAIL_IP
 read -p "Enter the path to your AWS Lightsail key file (.pem): " KEY_FILE
 
-# Set deployment flag for trading bot
-DEPLOY_TRADER=true
+# We're only deploying the XLM/USDC trading bot
 echo -e "${YELLOW}Deploying XLM/USDC Trading Bot...${NC}"
 
 # Validate inputs
@@ -39,72 +38,49 @@ chmod 400 "$KEY_FILE"
 
 echo -e "${YELLOW}Step 1: Transferring project files to AWS Lightsail...${NC}"
 # Copy the entire project to the AWS instance
-scp -i "$KEY_FILE" -r "$(pwd)" ec2-user@"$LIGHTSAIL_IP":/home/ec2-user/tradebot
+scp -i "$KEY_FILE" -r "$(pwd)" ubuntu@"$LIGHTSAIL_IP":/home/ubuntu/cashcow
 
 echo -e "${YELLOW}Step 2: Setting up the environment on AWS Lightsail...${NC}"
 # Execute setup commands on the remote instance
-ssh -i "$KEY_FILE" ec2-user@"$LIGHTSAIL_IP" << 'EOF'
+ssh -i "$KEY_FILE" ubuntu@"$LIGHTSAIL_IP" << 'EOF'
     # Print start message
     echo "Setting up on AWS Lightsail instance..."
     
     # Install required packages
-    sudo amazon-linux-extras install postgresql14 -y
-    sudo yum install postgresql postgresql-server postgresql-devel python3 python3-pip -y
+    sudo apt update
+    sudo apt install -y python3-venv python3-pip
     
-    # Initialize PostgreSQL
-    sudo postgresql-setup initdb
+    # Set up Python virtual environment
+    cd /home/ubuntu/cashcow
+    python3 -m venv venv
     
-    # Start PostgreSQL
-    sudo systemctl enable postgresql
-    sudo systemctl start postgresql
+    # Activate virtual environment and install dependencies
+    source venv/bin/activate
+    pip install -r requirements.txt
     
-    # Configure PostgreSQL
-    sudo -u postgres psql << PSQL
-        CREATE DATABASE stellar_trading;
-        CREATE USER ec2_user WITH PASSWORD '';
-        GRANT ALL PRIVILEGES ON DATABASE stellar_trading TO ec2_user;
-        \q
-PSQL
-    
-    # Allow local connections
-    sudo sed -i "s/#listen_addresses = 'localhost'/listen_addresses = 'localhost'/g" /var/lib/pgsql/data/postgresql.conf
-    echo "host    stellar_trading    ec2_user    127.0.0.1/32    trust" | sudo tee -a /var/lib/pgsql/data/pg_hba.conf
-    
-    # Restart PostgreSQL to apply changes
-    sudo systemctl restart postgresql
-    
-    # Install Python dependencies
-    cd /home/ec2-user/tradebot
-    pip3 install -r requirements.txt --user
-    
-    # Make sure psycopg2 is installed
-    pip3 install psycopg2-binary --user
+    # Make the trading script executable
+    chmod +x /home/ubuntu/cashcow/xlm_usdc_trader.py
     
     # Update environment variables and network connectivity settings
-    if [ -f "/home/ec2-user/tradebot/.env" ]; then
-        # Update database user
-        sed -i "s/DB_USER=toshi/DB_USER=ec2_user/g" /home/ec2-user/tradebot/.env
-        
-        # Ensure proper Stellar network settings
-        # Check and fix any RPC URL issues
-        if grep -q "invalid uri character" /home/ec2-user/tradebot/.env; then
-            echo "Fixing invalid RPC URL characters in .env file"
-            sed -i 's|\(HORIZON_URL=\).*|\1"https://horizon.stellar.org"|' /home/ec2-user/tradebot/.env
-        fi
-        
-        # Make sure we have a backup URL in case the primary fails
-        if ! grep -q "HORIZON_URL_BACKUP" /home/ec2-user/tradebot/.env; then
-            echo "HORIZON_URL_BACKUP=\"https://horizon-api.elliptic.co\"" >> /home/ec2-user/tradebot/.env
-        fi
-    else
-        echo "Warning: .env file not found. You may need to create it manually."
+    if [ ! -f "/home/ubuntu/cashcow/.env" ]; then
+        echo "Creating .env file from example"
+        cp /home/ubuntu/cashcow/.env.example /home/ubuntu/cashcow/.env
+        echo "Please update the .env file with your Stellar credentials"
     fi
     
-    # Make sure the deployment directory exists
-    mkdir -p /home/ec2-user/tradebot/deployment
+    # Ensure proper Stellar network settings
+    sed -i 's|\(HORIZON_URL=\).*|\1"https://horizon.stellar.org"|' /home/ubuntu/cashcow/.env
+    
+    # Make sure we have a backup URL in case the primary fails
+    if ! grep -q "HORIZON_URL_BACKUP" /home/ubuntu/cashcow/.env; then
+        echo "HORIZON_URL_BACKUP=\"https://horizon-api.elliptic.co\"" >> /home/ubuntu/cashcow/.env
+    fi
+    
+    # Make sure the logs directory exists
+    mkdir -p /home/ubuntu/cashcow/logs
     
     # Configure connection retries for Stellar network connectivity issues
-    cat > /home/ec2-user/tradebot/deployment/connection_retry.py << 'PYTHON'
+    cat > /home/ubuntu/cashcow/connection_retry.py << 'PYTHON'
 #!/usr/bin/env python3
 import time
 import socket
@@ -138,11 +114,11 @@ def retry_on_network_error(max_retries=5, backoff_factor=1.5, max_backoff=60):
     return decorator
 PYTHON
 
-    # Install the retry module at system level so all services can use it
-    sudo cp /home/ec2-user/tradebot/deployment/connection_retry.py /usr/local/lib/python3.7/site-packages/
+    # Copy the retry module to the virtual environment
+    cp /home/ubuntu/cashcow/connection_retry.py /home/ubuntu/cashcow/venv/lib/python3.*/site-packages/
     
     # Copy systemd service file for the trading bot
-    sudo cp /home/ec2-user/tradebot/stellar-trading-bot.service /etc/systemd/system/
+    sudo cp /home/ubuntu/cashcow/stellar-trading-bot.service /etc/systemd/system/
     
     # Reload systemd configuration
     sudo systemctl daemon-reload
@@ -160,12 +136,12 @@ echo -e "${GREEN}Deployment complete!${NC}"
 echo
 
 echo -e "${YELLOW}To check the trading bot status on your AWS instance:${NC}"
-echo "ssh -i \"$KEY_FILE\" ec2-user@\"$LIGHTSAIL_IP\" sudo systemctl status stellar-trading-bot.service"
+echo "ssh -i \"$KEY_FILE\" ubuntu@\"$LIGHTSAIL_IP\" sudo systemctl status stellar-trading-bot.service"
 echo
 echo -e "${YELLOW}To view the trading bot logs:${NC}"
-echo "ssh -i \"$KEY_FILE\" ec2-user@\"$LIGHTSAIL_IP\" sudo journalctl -u stellar-trading-bot.service -f"
+echo "ssh -i \"$KEY_FILE\" ubuntu@\"$LIGHTSAIL_IP\" sudo journalctl -u stellar-trading-bot.service -f"
 echo
 
 echo -e "${GREEN}Your Stellar Trading Bot has been deployed to your AWS Lightsail instance!${NC}"
 echo -e "${YELLOW}Remember to check your .env file configuration if you encounter any connection issues.${NC}"
-echo -e "${YELLOW}You can modify settings by editing /home/ec2-user/tradebot/.env on your AWS instance.${NC}"
+echo -e "${YELLOW}You can modify settings by editing /home/ubuntu/cashcow/.env on your AWS instance.${NC}"

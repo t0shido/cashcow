@@ -17,7 +17,7 @@ import os
 import json
 from loguru import logger
 
-from strategies.base_strategy import BaseStrategy
+from src.strategies.base_strategy import BaseStrategy
 
 class XlmUsdcSimpleStrategy(BaseStrategy):
     """

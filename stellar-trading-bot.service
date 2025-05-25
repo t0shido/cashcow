@@ -1,15 +1,16 @@
 [Unit]
 Description=Stellar XLM/USDC Trading Bot
-After=network.target postgresql.service stellar-data-collector.service
+After=network.target
 
 [Service]
-Type=simple
-User=ec2-user
-WorkingDirectory=/home/ec2-user/tradebot
-ExecStart=/usr/bin/python3 /home/ec2-user/tradebot/src/main.py
-Restart=always
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/cashcow
+ExecStart=/home/ubuntu/cashcow/venv/bin/python /home/ubuntu/cashcow/xlm_usdc_trader.py
+Restart=on-failure
 RestartSec=10
-Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
