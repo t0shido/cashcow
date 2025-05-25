@@ -26,7 +26,7 @@ from loguru import logger       # Advanced logging functionality with better for
 # Local module imports
 from config.settings import Settings                  # Configuration management class that loads from environment
 from src.api.stellar_api import StellarAPI                # Wrapper for Stellar SDK to simplify network operations
-from src.strategies.strategy_factory import StrategyFactory  # Factory pattern class to create trading strategies
+from src.strategies.xlm_usdc_simple import XlmUsdcSimpleStrategy  # XLM/USDC swing trading strategy
 from src.utils.logger import setup_logger                 # Custom logger configuration for file and console output
 
 # Global variables
@@ -97,19 +97,16 @@ def main():
     # This helps verify that the account has sufficient funds to operate
     logger.info(f"Account balance: {stellar_api.get_balance()}")
     
-    # Initialize the trading strategy specified in settings
-    # The StrategyFactory pattern allows for easy switching between different strategies
-    # without modifying the main code. It dynamically instantiates the requested strategy
-    # and provides it with the necessary API access and configuration settings.
-    strategy = StrategyFactory.get_strategy(
-        strategy_name=settings.strategy,  # Strategy name from settings (e.g., 'xlm_usdc_simple')
-        stellar_api=stellar_api,         # API instance for Stellar network operations
-        settings=settings                # Configuration settings for the strategy
+    # Initialize the XLM/USDC swing trading strategy
+    # This strategy buys when price drops and sells when price rises
+    strategy = XlmUsdcSimpleStrategy(
+        stellar_api=stellar_api,  # API instance for Stellar network operations
+        settings=settings         # Configuration settings for the strategy
     )
     
     # Log startup information before entering the main loop
-    # This provides confirmation that the bot is running with the expected configuration
-    logger.info(f"Bot running with {settings.strategy} strategy")
+    # This provides confirmation that the bot is running
+    logger.info("Bot running with XLM/USDC swing trading strategy")
     logger.info(f"Polling interval: {settings.polling_interval} seconds")
     
     # Main trading loop - this will run continuously until the bot is stopped
